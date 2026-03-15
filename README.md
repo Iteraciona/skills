@@ -8,9 +8,9 @@ La lista crece cada día conforme identificamos patrones que vale la pena automa
 
 | Skill | Descripción |
 |---|---|
-| **[api-creator](./api-creator/)** | Scaffold de APIs con Node.js + Express, MongoDB, JWT, Winston y arquitectura modular |
-| **[svelte-creator](./svelte-creator/)** | Scaffold de frontends con SvelteKit 5 + TailwindCSS 4, TypeScript, api-proxy y adapter-node |
-| **[readme-creator](./readme-creator/)** | Generación de README.md profesionales a partir de descripción del usuario o análisis del proyecto |
+| **[api-creator](./skills/api-creator/)** | Scaffold de APIs con Node.js + Express, MongoDB, JWT, Winston y arquitectura modular |
+| **[svelte-creator](./skills/svelte-creator/)** | Scaffold de frontends con SvelteKit 5 + TailwindCSS 4, TypeScript, api-proxy y adapter-node |
+| **[readme-creator](./skills/readme-creator/)** | Generación de README.md profesionales a partir de descripción del usuario o análisis del proyecto |
 
 ## 🚀 ¿Cómo se usan?
 
@@ -29,16 +29,17 @@ Los skills están diseñados para ser utilizados por un **agente de IA** (como G
 ## 📁 Estructura
 
 ```
-skills/
-├── api-creator/          # Skill para APIs Node.js + Express
-│   ├── SKILL.md          # Instrucciones del skill
-│   └── references/       # Documentación complementaria
-├── svelte-creator/       # Skill para frontends SvelteKit
-│   ├── SKILL.md
-│   └── references/
-├── readme-creator/       # Skill para generar READMEs
-│   └── SKILL.md
-└── README.md             # Este archivo
+.
+├── README.md                 # Este archivo
+└── skills/
+    ├── api-creator/          # Skill para APIs Node.js + Express
+    │   ├── SKILL.md          # Instrucciones del skill
+    │   └── references/       # Documentación complementaria
+    ├── svelte-creator/       # Skill para frontends SvelteKit
+    │   ├── SKILL.md
+    │   └── references/
+    └── readme-creator/       # Skill para generar READMEs
+        └── SKILL.md
 ```
 
 ## 🤝 Contribuir
