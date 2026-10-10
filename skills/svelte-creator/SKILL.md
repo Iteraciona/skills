@@ -18,7 +18,7 @@ Scaffold a production-ready SvelteKit + TailwindCSS 4 frontend in seconds. The g
 | adapter-node | latest | Node.js deployment adapter |
 | dotenv + dotenv-cli | latest | Environment variables loaded from `.env` |
 
-> **SvelteKit 3 differences** (this skill targets SvelteKit 3; do not apply SvelteKit 2 patterns):
+> **SvelteKit 3 differences** — new projects (Part 1) are always created with SvelteKit 3. Existing projects may still run SvelteKit 2: Part 2 starts by detecting the version and keeps the project's own patterns.
 > - There is **no `svelte.config.js`** — the adapter and compiler options are passed to `sveltekit({ ... })` inside `vite.config.ts`.
 > - The **`$lib` alias was removed** — importing from `$lib` throws an error. Use `#lib` (declared in the `imports` field of `package.json`) and include the file extension: `#lib/components/admin/Sidebar.svelte`.
 > - Hook types (`Handle`, `HandleFetch`) are exported from **`@sveltejs/kit/hooks`**, not from `@sveltejs/kit`.
@@ -289,6 +289,23 @@ After the project is created, tell the user:
 
 When the user wants to add a new page or module to an existing SvelteKit project, follow these steps.
 
+### Step 0: Detect the SvelteKit Version
+
+An existing project may run SvelteKit 2 or SvelteKit 3. Read the `@sveltejs/kit` version before writing any code, and never migrate the project to another major version unless the user asks for it.
+
+```bash
+grep '"@sveltejs/kit"' package.json
+```
+
+| | SvelteKit 2 (`^2.x`) | SvelteKit 3 (`^3.x`) |
+|---|---|---|
+| Lib imports | `$lib/components/...` | `#lib/components/...` (with file extension) |
+| Hook types | `import type { Handle } from '@sveltejs/kit'` | `import type { Handle, HandleFetch } from '@sveltejs/kit/hooks'` |
+| Header injection | Whatever `hooks.server.ts` already does (usually an `event.fetch` override inside `handle`) — leave it as is | `handleFetch` hook |
+| Config file | `svelte.config.js` | `vite.config.ts` |
+
+The examples below are written for SvelteKit 3. In a SvelteKit 2 project, apply the left column: replace `#lib` with `$lib` in every import, and do not touch the existing `hooks.server.ts` or `svelte.config.js`. If unsure, copy the import style of a file that already exists in the project.
+
 ### Step 1: Determine the Route Group
 
 Ask which route group the new page belongs to:
@@ -332,7 +349,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 </script>
 
 <h1>Users</h1>
-<!-- Use components from #lib/components/admin/users/ -->
+<!-- Use components from #lib/components/admin/users/ ($lib/... in SvelteKit 2) -->
 ```
 
 ### Step 3: Create the API Proxy
@@ -358,7 +375,7 @@ export const POST: RequestHandler = async ({ fetch, request }) => {
 };
 ```
 
-> Because `hooks.server.ts` exports a `handleFetch` hook, every call made from `+server.ts` using `fetch()` automatically includes the Bearer token, client IP headers, and handles 401 responses. You don't need to manually add these headers.
+> Because `hooks.server.ts` intercepts server-side fetches (`handleFetch` hook in SvelteKit 3, `event.fetch` override in SvelteKit 2), every call made from `+server.ts` using `fetch()` automatically includes the Bearer token, client IP headers, and handles 401 responses. You don't need to manually add these headers.
 
 ### Step 4: Create Components
 

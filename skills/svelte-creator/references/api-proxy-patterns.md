@@ -2,6 +2,8 @@
 
 This document contains the template code for the api-proxy architecture, the request interceptor (`hooks.server.ts`), and data loading patterns (`+page.ts`, `+server.ts`).
 
+> **Version note**: the templates below are written for SvelteKit 3. In an existing SvelteKit 2 project, import from `$lib` instead of `#lib`, import hook types from `@sveltejs/kit`, and keep the project's current `hooks.server.ts` unchanged. The `+page.ts` and `+server.ts` patterns need no changes for SvelteKit 2.
+
 ## Architecture Overview
 
 ```
