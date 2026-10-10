@@ -8,9 +8,8 @@ Complete directory tree for a scaffolded SvelteKit + TailwindCSS 4 project.
 ├── .env.example                  # Template for .env
 ├── .gitignore
 ├── package.json                  # Scripts: dev, build, preview, start
-├── svelte.config.js              # adapter-node configuration
 ├── tsconfig.json                 # TypeScript config (auto-generated)
-├── vite.config.ts                # TailwindCSS vite plugin + dotenv
+├── vite.config.ts                # adapter-node + TailwindCSS vite plugin + dotenv (no svelte.config.js in SvelteKit 3)
 ├── static/                       # Static assets (favicon, images, robots.txt)
 │
 └── src/
@@ -21,6 +20,7 @@ Complete directory tree for a scaffolded SvelteKit + TailwindCSS 4 project.
     ├── hooks.server.ts           # Request interceptor (token, IP, 401 handling)
     │
     ├── routes/
+    │   ├── +layout.svelte        # Root layout (favicon); no root +page.svelte — "/" belongs to (site)
     │   ├── +error.svelte         # Global error page
     │   │
     │   ├── (site)/               # PUBLIC route group

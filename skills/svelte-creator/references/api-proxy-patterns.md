@@ -2,6 +2,8 @@
 
 This document contains the template code for the api-proxy architecture, the request interceptor (`hooks.server.ts`), and data loading patterns (`+page.ts`, `+server.ts`).
 
+> **Version note**: the templates below are written for SvelteKit 3. In an existing SvelteKit 2 project, import from `$lib` instead of `#lib`, import hook types from `@sveltejs/kit`, and keep the project's current `hooks.server.ts` unchanged. The `+page.ts` and `+server.ts` patterns need no changes for SvelteKit 2.
+
 ## Architecture Overview
 
 ```
@@ -13,20 +15,21 @@ Browser → +page.svelte → +page.ts → api-proxy (+server.ts) → hooks inter
 The browser never talks directly to the backend. Every request goes:
 1. `+page.ts` calls the **api-proxy** (e.g., `/api/users/list`)
 2. The api-proxy `+server.ts` calls the **backend** using `fetch()`
-3. `hooks.server.ts` intercepts every `fetch()` call to inject auth token + client IP headers
+3. The `handleFetch` hook in `hooks.server.ts` intercepts every `fetch()` call to inject auth token + client IP headers
 4. The response flows back to `+page.ts` → `+page.svelte`
 
 ---
 
 ## hooks.server.ts — Request Interceptor
 
-This is the most important file in the architecture. It runs on every request and does three things:
-1. Extracts the client IP from proxy headers
-2. Overrides `event.fetch` to inject auth headers on every outbound request
-3. Handles 401 responses (clears cookies, returns error)
+This is the most important file in the architecture. It exports two hooks:
+1. `handle` — runs on every incoming request: extracts the client IP from proxy headers and reads the auth cookie into `event.locals`
+2. `handleFetch` — runs on every server-side `event.fetch` call: injects auth headers on the outbound request and handles 401 responses (clears cookies, returns error)
+
+> In SvelteKit 3 `event.fetch` is read-only, so it cannot be reassigned inside `handle`. Header injection must live in `handleFetch`. Hook types come from `@sveltejs/kit/hooks`.
 
 ```typescript
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleFetch } from '@sveltejs/kit/hooks';
 
 const protectedRoutes = ['/dashboard', '/users', '/settings', '/admin'];
 const publicRoutes = ['/login', '/register'];
@@ -62,7 +65,8 @@ export const handle: Handle = async ({ event, resolve }) => {
             event.locals.authToken = authToken;
             // event.locals.user = decoded;
         } catch (err) {
-            console.error('[hooks.server.ts] Invalid token:', err.message);
+            const reason = err instanceof Error ? err.message : String(err);
+            console.error('[hooks.server.ts] Invalid token:', reason);
             event.cookies.delete('authToken', { path: '/' });
         }
     }
@@ -73,43 +77,40 @@ export const handle: Handle = async ({ event, resolve }) => {
         console.log(`[hooks.server.ts] Access denied to ${path}. Redirecting to /login`);
     }
 
-    // --- Override fetch to inject headers ---
-    const originalFetch = event.fetch;
-    event.fetch = async (input, init = {}) => {
-        const headers = new Headers(init.headers || {});
-
-        // Inject auth token
-        if (authToken) {
-            headers.set('Authorization', `Bearer ${authToken}`);
-        }
-
-        // Inject client IP
-        if (event.locals.clientIp) {
-            headers.set('X-Client-IP', event.locals.clientIp);
-            headers.set('X-Forwarded-For', event.locals.clientIp);
-            headers.set('X-Real-IP', event.locals.clientIp);
-        }
-
-        const response = await originalFetch(input, { ...init, headers });
-
-        // Handle 401 — clear auth and return error
-        if (response.status === 401) {
-            console.log("[hooks.server.ts] Unauthorized:", "Forbidden");
-            event.cookies.delete('authToken', { path: '/' });
-
-            return new Response(
-                JSON.stringify({ message: "User not allowed", success: false }),
-                { status: response.status, headers: { 'Content-Type': 'application/json' } }
-            );
-        }
-
-        return response;
-    };
-
     const response = await resolve(event);
     const duration = Date.now() - start;
 
     console.log(`[${new Date().toISOString()}] ← ${response.status} ${method} ${path} [${duration}ms] ${isAuthenticated ? '🔐' : '🔓'}`);
+
+    return response;
+};
+
+// Runs on every server-side `event.fetch` call (load functions and api-proxy endpoints).
+export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
+    // Inject auth token
+    if (event.locals.authToken) {
+        request.headers.set('Authorization', `Bearer ${event.locals.authToken}`);
+    }
+
+    // Inject client IP
+    if (event.locals.clientIp) {
+        request.headers.set('X-Client-IP', event.locals.clientIp);
+        request.headers.set('X-Forwarded-For', event.locals.clientIp);
+        request.headers.set('X-Real-IP', event.locals.clientIp);
+    }
+
+    const response = await fetch(request);
+
+    // Handle 401 — clear auth and return error
+    if (response.status === 401) {
+        console.log("[hooks.server.ts] Unauthorized:", "Forbidden");
+        event.cookies.delete('authToken', { path: '/' });
+
+        return new Response(
+            JSON.stringify({ message: "User not allowed", success: false }),
+            { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
 
     return response;
 };
@@ -123,7 +124,7 @@ declare global {
         interface Locals {
             clientIp: string;
             authToken?: string;
-            user?: Record<string, any>;
+            user?: Record<string, unknown>;
         }
     }
 }
@@ -204,7 +205,7 @@ export const POST: RequestHandler = async ({ fetch, request }) => {
 };
 ```
 
-> Remember: `fetch()` inside `+server.ts` is the overridden version from `hooks.server.ts`. It automatically includes the Authorization header and client IP headers. You don't need to add them manually.
+> Remember: `fetch()` inside `+server.ts` goes through the `handleFetch` hook from `hooks.server.ts`. It automatically includes the Authorization header and client IP headers. You don't need to add them manually.
 
 ---
 
@@ -271,13 +272,13 @@ export const load: PageLoad = async ({ fetch, params }) => {
 
 ## +page.svelte — Presentation Only
 
-Keep `.svelte` files clean. They receive data from `+page.ts` and render it, using components from `$lib/components/`.
+Keep `.svelte` files clean. They receive data from `+page.ts` and render it, using components from `#lib/components/` (SvelteKit 3 removed the `$lib` alias).
 
 ```svelte
 <script lang="ts">
     import type { PageData } from "./$types";
-    import UserTable from "$lib/components/admin/users/UserTable.svelte";
-    import WebPagination from "$lib/components/utils/Pagination/WebPagination.svelte";
+    import UserTable from "#lib/components/admin/users/UserTable.svelte";
+    import WebPagination from "#lib/components/utils/Pagination/WebPagination.svelte";
 
     let { data }: { data: PageData } = $props();
 </script>

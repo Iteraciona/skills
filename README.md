@@ -9,7 +9,7 @@ La lista crece cada día conforme identificamos patrones que vale la pena automa
 | Skill | Descripción |
 |---|---|
 | **[api-creator](./skills/api-creator/)** | Scaffold de APIs con Node.js + Express, MongoDB, JWT, Winston y arquitectura modular |
-| **[svelte-creator](./skills/svelte-creator/)** | Scaffold de frontends con SvelteKit 5 + TailwindCSS 4, TypeScript, api-proxy y adapter-node |
+| **[svelte-creator](./skills/svelte-creator/)** | Scaffold de frontends con SvelteKit 3 (Svelte 5) + TailwindCSS 4, TypeScript, api-proxy y adapter-node |
 | **[readme-creator](./skills/readme-creator/)** | Generación de README.md profesionales a partir de descripción del usuario o análisis del proyecto |
 
 ## 🚀 ¿Cómo se usan?

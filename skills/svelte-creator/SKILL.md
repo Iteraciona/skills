@@ -12,11 +12,17 @@ Scaffold a production-ready SvelteKit + TailwindCSS 4 frontend in seconds. The g
 | Technology | Version | Purpose |
 |---|---|---|
 | Svelte | 5 (Runes) | UI framework |
-| SvelteKit | 2.x | Full-stack framework |
+| SvelteKit | 3.x | Full-stack framework |
 | TailwindCSS | 4.x | CSS-first utility framework |
-| TypeScript | 5.x | Type safety |
+| TypeScript | 6.x | Type safety |
 | adapter-node | latest | Node.js deployment adapter |
-| dotenv + dotenv-cli | latest | Environment variables (Node 18 compat) |
+| dotenv + dotenv-cli | latest | Environment variables loaded from `.env` |
+
+> **SvelteKit 3 differences** — new projects (Part 1) are always created with SvelteKit 3. Existing projects may still run SvelteKit 2: Part 2 starts by detecting the version and keeps the project's own patterns.
+> - There is **no `svelte.config.js`** — the adapter and compiler options are passed to `sveltekit({ ... })` inside `vite.config.ts`.
+> - The **`$lib` alias was removed** — importing from `$lib` throws an error. Use `#lib` (declared in the `imports` field of `package.json`) and include the file extension: `#lib/components/admin/Sidebar.svelte`.
+> - Hook types (`Handle`, `HandleFetch`) are exported from **`@sveltejs/kit/hooks`**, not from `@sveltejs/kit`.
+> - **`event.fetch` is read-only** — outgoing requests are intercepted with the `handleFetch` hook, not by reassigning `event.fetch`.
 
 ---
 
@@ -28,10 +34,10 @@ Before creating anything, verify the current workspace state:
 
 **1a. Check if a SvelteKit project already exists**
 
-Look for a `svelte.config.js` or `svelte.config.ts` in the current workspace root. If it exists, inform the user and ask if they want to proceed in a subdirectory.
+Look for `@sveltejs/kit` in the `package.json` of the current workspace root (SvelteKit 3 projects have no `svelte.config.js`; older ones do). If it exists, inform the user and ask if they want to proceed in a subdirectory.
 
 ```bash
-ls svelte.config.* 2>/dev/null
+grep -s '"@sveltejs/kit"' package.json; ls svelte.config.* 2>/dev/null
 ```
 
 If there's already a project, say: "It looks like there's already a SvelteKit project here. Want me to create the new frontend in a subfolder?"
@@ -42,17 +48,17 @@ If there's already a project, say: "It looks like there's already a SvelteKit pr
 node -v
 ```
 
-This project supports Node 18+ thanks to dotenv-cli.
+SvelteKit 3 requires **Node 22.17 or newer**. If the version is older, stop and tell the user to upgrade Node before continuing.
 
 ### Step 2: Create the Project
 
 Ask the user for a project name if they haven't provided one, then run:
 
 ```bash
-npx -y sv create <project-name>
+npx -y sv create <project-name> --template minimal --types ts --no-add-ons --install npm
 ```
 
-When the CLI prompts you, select:
+The flags answer every prompt, so the command runs without interaction:
 - **Template**: SvelteKit minimal
 - **TypeScript**: Yes (TypeScript)
 - **Add-ons**: None (we'll install them manually)
@@ -77,39 +83,40 @@ Install runtime dependencies:
 npm install dotenv dotenv-cli
 ```
 
+Remove the default adapter, which is replaced by adapter-node:
+
+```bash
+npm uninstall @sveltejs/adapter-auto
+```
+
 ### Step 4: Configure the Project
 
 After installing dependencies, modify the following files:
 
-**4a. `svelte.config.js` → Replace adapter-auto with adapter-node:**
+**4a. `vite.config.ts` → Replace adapter-auto with adapter-node, add the TailwindCSS plugin and dotenv:**
+
+SvelteKit 3 has no `svelte.config.js`. The adapter is configured inside `sveltekit({ ... })`. Keep the `compilerOptions` block that the template generated.
 
 ```typescript
 import adapter from '@sveltejs/adapter-node';
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-
-/** @type {import('@sveltejs/kit').Config} */
-const config = {
-    kit: {
-        adapter: adapter(),
-        alias: {
-            '$lib': 'src/lib'
-        }
-    }
-};
-
-export default config;
-```
-
-**4b. `vite.config.ts` → Add TailwindCSS plugin and dotenv:**
-
-```typescript
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { config } from 'dotenv';
 
 export default defineConfig({
-    plugins: [tailwindcss(), sveltekit()],
+    plugins: [
+        tailwindcss(),
+        sveltekit({
+            compilerOptions: {
+                // Force runes mode for the project, except for libraries. Can be removed in svelte 6.
+                runes: ({ filename }) =>
+                    filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+            },
+
+            adapter: adapter()
+        })
+    ],
     server: {
         allowedHosts: true
     }
@@ -117,6 +124,8 @@ export default defineConfig({
 
 config();
 ```
+
+**4b. Lib alias** — nothing to configure. The template already declares `#lib` in the `imports` field of `package.json`. Do not add a `$lib` alias: SvelteKit 3 removed it and importing from `$lib` throws an error.
 
 **4c. Update `package.json` scripts:**
 
@@ -133,7 +142,7 @@ Add the `start` script for production deployment:
 }
 ```
 
-> The `start` script uses `dotenv-cli` to load `.env` and then runs the built Node.js server. This ensures compatibility with Node 18 servers where `--env-file` is not available.
+> The `start` script uses `dotenv-cli` to load `.env` and then runs the built Node.js server. Keep the `prepare`, `check` and `check:watch` scripts that the template generated.
 
 **4d. Create `.env` and `.env.example`:**
 
@@ -178,6 +187,12 @@ mkdir -p src/lib/stores
 
 # Static assets
 mkdir -p static
+```
+
+The template ships a `src/routes/+page.svelte`. Delete it: it resolves to `/`, the same URL as `src/routes/(site)/+page.svelte`, and SvelteKit rejects two pages on one route. Keep `src/routes/+layout.svelte` (it sets the favicon).
+
+```bash
+rm src/routes/+page.svelte
 ```
 
 ### Step 6: Create Core Files
@@ -236,10 +251,14 @@ Both files must:
 
 **6c. `src/hooks.server.ts`** — The request interceptor. Read `references/api-proxy-patterns.md` for the full template. This file:
 - Extracts the client IP from `x-forwarded-for` or `getClientAddress()`
-- Saves it to `event.locals.clientIp`
-- Overrides `event.fetch` to inject `Authorization` (Bearer token), `X-Client-IP`, `X-Forwarded-For`, and `X-Real-IP` headers on every outgoing request
+- Saves it to `event.locals.clientIp`, and the auth cookie to `event.locals.authToken` (both in the `handle` hook)
+- Exports a `handleFetch` hook that injects `Authorization` (Bearer token), `X-Client-IP`, `X-Forwarded-For`, and `X-Real-IP` headers on every outgoing `event.fetch` request
 - Handles 401 responses by clearing auth cookies
 - Optionally protects routes by checking authentication state
+
+Also declare `clientIp`, `authToken` and `user` in `App.Locals` inside `src/app.d.ts` (template in the same reference file).
+
+After creating the files, run `npm run check` and fix any error before reporting the project as ready.
 
 **6d. Default pages:**
 
@@ -269,6 +288,23 @@ After the project is created, tell the user:
 ## Part 2: Add New Modules / Pages
 
 When the user wants to add a new page or module to an existing SvelteKit project, follow these steps.
+
+### Step 0: Detect the SvelteKit Version
+
+An existing project may run SvelteKit 2 or SvelteKit 3. Read the `@sveltejs/kit` version before writing any code, and never migrate the project to another major version unless the user asks for it.
+
+```bash
+grep '"@sveltejs/kit"' package.json
+```
+
+| | SvelteKit 2 (`^2.x`) | SvelteKit 3 (`^3.x`) |
+|---|---|---|
+| Lib imports | `$lib/components/...` | `#lib/components/...` (with file extension) |
+| Hook types | `import type { Handle } from '@sveltejs/kit'` | `import type { Handle, HandleFetch } from '@sveltejs/kit/hooks'` |
+| Header injection | Whatever `hooks.server.ts` already does (usually an `event.fetch` override inside `handle`) — leave it as is | `handleFetch` hook |
+| Config file | `svelte.config.js` | `vite.config.ts` |
+
+The examples below are written for SvelteKit 3. In a SvelteKit 2 project, apply the left column: replace `#lib` with `$lib` in every import, and do not touch the existing `hooks.server.ts` or `svelte.config.js`. If unsure, copy the import style of a file that already exists in the project.
 
 ### Step 1: Determine the Route Group
 
@@ -313,7 +349,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 </script>
 
 <h1>Users</h1>
-<!-- Use components from $lib/components/admin/users/ -->
+<!-- Use components from #lib/components/admin/users/ ($lib/... in SvelteKit 2) -->
 ```
 
 ### Step 3: Create the API Proxy
@@ -339,7 +375,7 @@ export const POST: RequestHandler = async ({ fetch, request }) => {
 };
 ```
 
-> Because `hooks.server.ts` overrides `event.fetch`, every call made from `+server.ts` using `fetch()` automatically includes the Bearer token, client IP headers, and handles 401 responses. You don't need to manually add these headers.
+> Because `hooks.server.ts` intercepts server-side fetches (`handleFetch` hook in SvelteKit 3, `event.fetch` override in SvelteKit 2), every call made from `+server.ts` using `fetch()` automatically includes the Bearer token, client IP headers, and handles 401 responses. You don't need to manually add these headers.
 
 ### Step 4: Create Components
 
